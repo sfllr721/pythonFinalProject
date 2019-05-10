@@ -51,11 +51,12 @@ class player(object):
         self.wasGoingRight = True
         self.isJump = False
         self.jumpCount = 12
-        self.midAirModifier = 2
         self.walkCount = 0
         self.idleCount = 0
         self.gauge = 0
         self.health = 100
+        self.iFrames = 0
+        self.bulletDelay = 0
 
     def draw(self, win):
         #Reset to these with the number of frames you want per animation
@@ -114,16 +115,28 @@ class enemy(object):
         self.velocity = 1 * direction
         self.walkCount = 0
         self.health = health
-        self.iFrames = 0
+        self.isHurt = False
+        self.frameCount = 24
     def draw(self, win):
-        if (self.walkCount >= 24):
+        if (self.isHurt):
+            self.frameCount = 45
+            self.isHurt = False
+        if (self.walkCount >= self.frameCount):
             self.walkCount = 0
-        if(self.left):
+            self.frameCount = 24
+
+        if(self.left and not (self.frameCount == 45)):
             win.blit(enemyWalkingAnimation[self.walkCount//3], (self.x, self.y))
-            self.walkCount += 1
-        elif(self.right):
+
+        elif(self.right and not (self.frameCount == 45)):
             win.blit(pygame.transform.flip(enemyWalkingAnimation[self.walkCount// 3], True, False), (self.x, self.y))
-            self.walkCount += 1
+
+        if(self.frameCount == 45 and self.left):
+            win.blit(enemyHurtAnimation[self.walkCount//3], (self.x, self.y))
+        if (self.frameCount == 45 and self.right):
+            win.blit(pygame.transform.flip(enemyHurtAnimation[self.walkCount // 3], True, False), (self.x, self.y))
+        self.walkCount += 1
+
 
 #Create the projectile class that the character will shoot
 class projectile(object):
@@ -184,47 +197,44 @@ def redrawFrame():
     win.blit(text, textpos)
     pygame.display.update()
 #Creates enemies until game ends
-def spawnEnemy():
-    global startRight
-    global lastDirection
-    global score
-    global enemyVolume
+class spawnEnemy():
+    def __init__(self):
+        self.startRight = -1
+        if (random.random() > .5):
+            self.startRight = 1
+        self.lastDirection = 0
     #Handle Initial Spawn
     #Start Right
-    if startRight == 1:
-        enemyHandler.append(enemy(10, yLimit - 120, 128, 128, 1, True, False, 100 + 50 * score//500))
-        lastDirection = 1
-        startRight = 0
-        return
-    #Start Left
-    elif startRight == -1:
-        enemyHandler.append(enemy(xLimit - 128, yLimit - 120, 128, 128, -1, False, True, 100 + 50 * score//500))
-        lastDirection = -1
-        startRight = 0
-        return
-
-    #Make a right moving enemy
-    if lastDirection == -1 and len(enemyHandler) < enemyVolume:
-        enemyHandler.append(enemy(10, yLimit-120, 128, 128, 1, True, False, 100 + 50 * score//500))
-        lastDirection = 1
-    #Make a left moving enemy
-    elif lastDirection == 1 and len(enemyHandler) < enemyVolume:
-        enemyHandler.append(enemy(xLimit - 128, yLimit - 120, 128, 128, -1, False, True, 100 + 50 * score//500 ))
-        lastDirection = -1
+    def generateEnemy(self):
+        if self.startRight == 1:
+            enemyHandler.append(enemy(10, yLimit - 120, 128, 128, 1, True, False, 100 + 50 * score//500))
+            self.lastDirection = 1
+            self.startRight = 0
+            return
+        #Start Left
+        elif self.startRight == -1:
+            enemyHandler.append(enemy(xLimit - 128, yLimit - 120, 128, 128, -1, False, True, 100 + 50 * score//500))
+            self.lastDirection = -1
+            self.startRight = 0
+            return
+        #Make a right moving enemy
+        if self.lastDirection == -1 and len(enemyHandler) < enemyVolume:
+            enemyHandler.append(enemy(10, yLimit-120, 128, 128, 1, True, False, 100 + 50 * score//500))
+            self.lastDirection = 1
+        #Make a left moving enemy
+        elif self.lastDirection == 1 and len(enemyHandler) < enemyVolume:
+            enemyHandler.append(enemy(xLimit - 128, yLimit - 120, 128, 128, -1, False, True, 100 + 50 * score//500 ))
+            self.lastDirection = -1
 
 #Main Loop
-startRight = -1
-lastDirection = 0
-if(random.random() > .5 ):
-    startRight = 1
 mainPlayer = player(0, yLimit - 75, 70, 75, 5)
+enemyGenerator = spawnEnemy()
 enemyHandler = []
 bullets = []
 coins = []
 bigBullets = []
-#Set counter for enemy spawns
+#Set counter, score, and the number of allowed enemies
 enemyCount = 1
-iFrames = 0
 score = 0
 enemyVolume = 5
 while running:
@@ -286,24 +296,21 @@ while running:
         if mainPlayer.wasGoingRight:
             direction = 1
         #Checks if charge meter is filled to use stronger bullets
-        if(mainPlayer.gauge == 10):
+        if(mainPlayer.gauge == 10 and mainPlayer.bulletDelay == 0):
             bullets.append(projectile(round(mainPlayer.x + mainPlayer.width//2), round(mainPlayer.y + mainPlayer.height//2),5, (255, 0, 0), direction, 100, True))
             mainPlayer.gauge = 0
-        elif len(bullets) < 2:
+            mainPlayer.bulletDelay = 35
+        elif mainPlayer.bulletDelay == 0:
             bullets.append(projectile(round(mainPlayer.x + mainPlayer.width//2), round(mainPlayer.y + mainPlayer.height//2), 5,(255, 0,0), direction, 50, False))
-    #Updates actual position of character
+            mainPlayer.bulletDelay = 35
+
+    #Updates actual position of character but not jumping
     if (pressed_left and mainPlayer.x > 0):
-        #Gives more in air control
-        if(pressed_up):
-            mainPlayer.x -= mainPlayer.velocity * mainPlayer.midAirModifier
         mainPlayer.x -= mainPlayer.velocity
         mainPlayer.right = False
         mainPlayer.left = True
         mainPlayer.wasGoingRight = False
     elif (pressed_right and mainPlayer.x < xLimit - mainPlayer.width):
-        #Gives more in air control
-        if (pressed_up):
-            mainPlayer.x += mainPlayer.velocity * mainPlayer.midAirModifier
         mainPlayer.x += mainPlayer.velocity
         mainPlayer.right = True
         mainPlayer.left = False
@@ -312,6 +319,7 @@ while running:
         mainPlayer.right = False
         mainPlayer.left = False
         mainPlayer.walkCount = 0
+
     #Controls jumping
     if (pressed_up):
         mainPlayer.walkCount = 0
@@ -321,7 +329,7 @@ while running:
             #Sets the falling frame of the jump animation
             if(mainPlayer.jumpCount < 0):
                 mainPlayer.falling = True
-            mainPlayer.y -= (abs(mainPlayer.jumpCount)* mainPlayer.jumpCount) * .5
+            mainPlayer.y -= (abs(mainPlayer.jumpCount)* mainPlayer.jumpCount) * .35
             if(mainPlayer.y < 0):
                 mainPlayer.y = 0
             mainPlayer.jumpCount -= 1
@@ -330,35 +338,38 @@ while running:
             mainPlayer.falling = False
             mainPlayer.jumping = False
             mainPlayer.jumpCount = 12
+
+    #Deals with collisions of bullets and enemies
     for e in enemyHandler:
-        if(e.iFrames > 0):
-            e.iFrames -= 1
         #Checks if bullets hit
         for b in bullets:
-            if(e.x <= b.x <= e.x + 100 and 0 <= b.y <= yLimit and e.iFrames == 0):
+            if(e.x <= b.x <= e.x + 100 and 0 <= b.y <= yLimit):
                 e.health -= b.damage
-                e.iFrames = 30
                 bullets.pop(bullets.index(b))
+                e.isHurt = True
         # Player Collided with Snail
-        if (e.x <= mainPlayer.x <= e.x + 100 and e.y <= mainPlayer.y <= yLimit and iFrames == 0):
+        if (e.x <= mainPlayer.x <= e.x + 100 and e.y <= mainPlayer.y <= yLimit and mainPlayer.iFrames == 0):
             mainPlayer.health -= 10
-            iFrames = 50
+            mainPlayer.iFrames = 50
+
+    #Sets a spawn rate and enemy volume according to the player's score
     if(score < 100):
         spwnRate = 300
-        enemyVolume += 1
     elif(score < 500):
         spwnRate = 200
-        enemyVolume += 2
+        enemyVolume = 7
     elif(score < 1000):
         spwnRate = 100
-        enemyVolume += 3
-    elif(score < 2000):
+        enemyVolume = 10
+    elif(score >= 1000):
         spwnRate = 50
-        enemyVolume += 4
+        enemyVolume  = 14
+    else:
+        spwnRate = 300
 
     #Makes and manages enemies
     if(enemyCount % spwnRate == 0):
-        spawnEnemy()
+        enemyGenerator.generateEnemy()
     if(enemyCount == 1000):
         enemyCount = 0
 
@@ -369,13 +380,14 @@ while running:
         if e.health <= 0:
             score += 100
             enemyHandler.pop(enemyHandler.index(e))
-
         #Move enemy accordingly
         e.x += e.velocity
 
+    #Handles all the incrementing tasks
     enemyCount += 1
-    if(iFrames > 0):
-        iFrames -= 1
+    if(mainPlayer.iFrames > 0):
+        mainPlayer.iFrames -= 1
+    if(mainPlayer.bulletDelay > 0):
+        mainPlayer.bulletDelay -=1
     redrawFrame()
-
 pygame.quit()
